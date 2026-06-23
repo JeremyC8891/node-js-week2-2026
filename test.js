@@ -49,7 +49,7 @@ describe('任務一：getUploadConfig', () => {
     const config = getUploadConfig();
     expect(config.uploadDir).toBe('/tmp');
     expect(config.maxFileSize).toBe(5 * 1024 * 1024);
-    expect(config.gymName).toBe('未命名健身房');
+    expect(config.gymName).toBe('FitClub');
   });
 });
 
