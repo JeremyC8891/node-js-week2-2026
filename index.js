@@ -141,20 +141,78 @@ function formatUploadLog(meta, config) {
  *   // 在 createUploadServer 裡：
  *   http.createServer((req, res) => router(req, res, config))
  */
-function router(req, res, config) {
-  // TODO: 實作此函式
-  // 建議（非強制）：
-  //   - 拆出 handleUpload(req, res, config)：formidable 解析邏輯
-  //   - 拆出 handleNotFound(req, res)：404 邏輯
-  //   - router 只看 method + url、呼叫對應 handler
-  // formidable 錯誤處理要點：
-  //   - 錯誤解析（例如：maxFileSize）會進到 form.parse 的 callback err，因此錯誤回應（res）可撰寫在這個 callback
-  //   - form.on('error', ...) 不需再處理 res 相關，避免產生回應兩次的錯誤。這個部分可用來紀錄 log、清理暫存檔、額外監控等等。目前可先有此概念即可，或者初步撰寫如下：
-  //     form.on('error', (err) => {
-  //       console.log(err); // 記錄 log、清理暫存檔、額外監控可以寫在這邊
-  //     });  
+// TODO: 實作此函式
+// 建議（非強制）：
+//   - 拆出 handleUpload(req, res, config)：formidable 解析邏輯
+//   - 拆出 handleNotFound(req, res)：404 邏輯
+//   - router 只看 method + url、呼叫對應 handler
+// formidable 錯誤處理要點：
+//   - 錯誤解析（例如：maxFileSize）會進到 form.parse 的 callback err，因此錯誤回應（res）可撰寫在這個 callback
+//   - form.on('error', ...) 不需再處理 res 相關，避免產生回應兩次的錯誤。這個部分可用來紀錄 log、清理暫存檔、額外監控等等。目前可先有此概念即可，或者初步撰寫如下：
+//     form.on('error', (err) => {
+//       console.log(err); // 記錄 log、清理暫存檔、額外監控可以寫在這邊
+//     });  
+
+//   - 拆出 handleUpload(req, res, config)：formidable 解析邏輯
+function handleUpload(req, res, config) {
+  const form = formidable({
+    uploadDir: config.uploadDir,
+    maxFileSize: config.maxFileSize,
+    keepExtensions: true,
+  });
   
+  form.parse(req, (err, fields, files) => {
+    // 1) 解析過程出錯（例如檔案超過大小限制）→ 500
+    if (err) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: err.message }));
+      return; // 回應後一定要 return，避免往下重複回應
+    }
+
+    // formidable v3 的 files.file 會是一個陣列，取第一個；沒上傳檔案就會是 undefined
+    const file = files.file?.[0];
+
+    if (!file) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "No file uploaded" }));
+      return;
+    }
+
+    // 使用任務三的函式來取得 meta（在確認有 file 之後才呼叫）
+    const meta = parseFileMetadata(file);
+    
+    // 回傳成功格式
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        filename: meta.filename,
+        sizeKB: meta.sizeKB,
+        ext: meta.ext,
+        savedPath: file.filepath, // formidable v3 使用 filepath 屬性
+      }),
+    );
+    // 使用任務四的函式來印出 log
+    console.log(formatUploadLog(meta, config));
+
+  });
+
 }
+
+//   - 拆出 handleNotFound(req, res)：404 邏輯
+function handleNotFound(req, res) {
+  res.writeHead(404, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ error: "Not Found" }));
+}
+
+function router(req, res, config) {
+  if (req.method === "POST" && req.url === "/coaches/avatar") {
+    handleUpload(req, res, config);
+    return;
+  } else {
+    handleNotFound(req, res);
+    
+  }
+};
 
 // ========== 任務六：建立上傳 server ==========
 /**
